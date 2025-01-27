@@ -1,4 +1,4 @@
-# kivarepo
+# 🦊 kivarepo 🦊
 
 Hello! This portfolio was created in a hurry, so it might be quite disorganized depending on when you're viewing it.
 
