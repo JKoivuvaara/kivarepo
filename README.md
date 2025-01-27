@@ -1,6 +1,6 @@
 # 🦊 kivarepo 🦊
 
-Hello! This portfolio was created in a hurry, so it might be quite disorganized depending on when you're viewing it.
+Hello! This portfolio was created in a hurry, so it might be quite disorganized/incomplete depending on when you're viewing it.
 
 Either way, in this README file you can find direct link to some interesting projects that are not directly in this repository.
 
