@@ -9,13 +9,13 @@ ___
 
 **Principles of Digital Fabrication**
 
+Demo [video](https://youtu.be/DQNFaxAtMqw)
+
 Final [presentation](https://unioulu-my.sharepoint.com/:p:/g/personal/jkoivuva20_student_oulu_fi/EVB8i2lh7X9NnQT7mfbl0fsBUJiz_8qDocWAjB6w9HLy_g?e=WFlHid)
 
 Project [Github](https://github.com/KPAhola/Puck-laying-robot)​
 
 Tinkercad [demo](https://www.tinkercad.com/things/8yVFrZpvLbs?sharecode=DBiaaLiFat3zCE42YEYs_RuZ-DGcOZObMB2OBiePGjs​)
-
-Demo [video](https://youtu.be/DQNFaxAtMqw)
 
 ___
 
