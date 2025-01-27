@@ -1,0 +1,565 @@
+# fibonacci.ys
+# Made by Jaakko Koivuvaara
+# Date: 12.2023
+# Final project for the course Tietokonejärjestelmät / Computer Systems
+
+# This program checks if a sequence of numbers contains any non-fibonacci numbers.
+
+# You can try this program here: https://boginw.github.io/js-y86-64/
+# by copy pasting this entire file to the source code section
+
+# The program halts after the first non-fibonacci number.
+# This number is placed in %rax.
+
+# If all the numbers are fibonacci numbers, %rax returns 0.
+
+# you can modify the numbers being tested at the end of this file
+
+
+
+
+###### Estimation of number of instructions  ######
+
+# instruction counts are only estimates
+
+### Multiplication ###
+#
+# (x is a positive number)
+# multiply x*5 with decide_multiplier, ~634 instructions
+# multiply x*5 without decide_multiplier, ~288 instructions
+#
+# The program only multiplies numbers with themselves or with 5 (0b101),
+# so decide_multiplier is unlikely to change the multiplier. Even if it does,
+# it would only marginally help the multiply subroutine. In my testing decide_multiplier
+# never improved the instruction count.
+# I decided not to use decide_multiplier in this program.
+#
+# examples of some common multiplications the program has to do
+# multiply 2*2, ~276 instructions
+# multiply 55*55, ~366 instructions
+# multiply 987*987, ~540 instructions
+#
+# the average of these tree calculations is: 394 instructions
+
+### Square root ###
+#
+# exacamples of the values we'll have to square:
+# 5*2*2+4 = 24, 5*55*55-4 = 15121, 5*987*987+4 = 4870849
+# square_root(24), ~980 instructions
+# square_root(15121), ~2124 instructions
+# square_root(4870849), ~3554 instructions
+#
+# the average of these tree calculations is: 2219 instructions
+#
+# Calculating the square of a value is clearly a lot more intensive than
+# multiplying two values. This is mostly because the square root algorithm has
+# to shift values right, which requires a lot of instructions.
+
+### fibonacci subroutines ###
+#
+# fibonacci
+# ~7 instructions per number in array
+#
+# test_number
+# if the number is 0, 4 instructions
+# At most ~30 instructions per number in array and more importantly max 4 multiplications
+# and max 2 square roots.
+#
+# Let's assume every multiplication and square_root takes the average
+# ammount calculated above. (multiplication: 394 instructions, square root: 2219 instructions)
+# If every number being tested (except for 0) uses the maximum ammount of multiplications 
+# and square roots, then a sequence of 6 fibonacci numbers followed by 0 requires 
+# 6*(7+30) + 6*4*394 + 6*2*2219 = 36306 instructions.
+#
+# The same calculation with the worst cases for multiplication and square_root:
+# 6*(7+30) + 6*4*540 + 6*2*3554 = 55830 instructions.
+#
+# Since many numbers only require 3 multiplications and 1 square root,
+# the actual ammount of instructions would be a lot smaller. Let's assume the average number
+# requires 3,5 multiplications and 1,5 square roots: 
+# 6*(7+30) + 6*3,5*394 + 6*1,5*2219 = 28467 instructions
+#
+# Smaller numbers also take fewer instructions to process, so 
+# {1, 2, 3, 5, 8, 13, 0} takes fewer instructions than {89, 144, 233, 377, 610, 987, 0}
+# In my testing, the first sequence took 15963 instructions and the latter 32301 instructions.
+# (instruction counts are not precise)
+
+
+### bottlenecks ###
+#
+# In [6*(7+30) + 6*3,5*394 + 6*1,5*2219]
+# square root takes up around 70% of all the instructions and 
+# multiplication around 30%. 
+# 
+# Calculating the square root requires shifting numbers right, which requires a lot of instructions.
+# finding a more efficient algorithm for calculating a square root would improve the excecution times
+# the most. 
+#
+# Improving multiplication is also important.
+#
+# A key element effecting both square root and multiplication is the size
+# of the look up table for the powers of two. A bigger table means the program can handle bigger
+# numbers, but it also makes the program slower as the program has to go trough the
+# same loop more times.
+#
+# I think both multiplication and square_root could be optimized further, but I've decided not
+# to do that, because there is a significantly better way to make this program.
+
+
+
+###### A better way ######
+
+# Overall the algorithm this program uses to check if a number is a fibonacci number 
+# is very bad. This program doesn't even work with numbers over 1000.
+#
+# The biggest possible fibonacci number
+# you can represent in 64 bit signed 2's complement is 7540113804746346429, which 
+# is the 92. fibonacci number.
+# This means you only need a look up table of 91 values to account for all the possible
+# fibonacci values between 0 and 0x7FFFFFFFFFFF.
+#
+# The better way to check if a value is a fibonacci number is to simply go trough a look
+# up table of fibonacci numbers.
+#
+# Alternatively you could calculate all the fibonacci numbers with a simple loop
+# 1, 1+0=1, 1+1=2, 1+2=3, 2+3=5, 3+5=8 ...
+# You would only need to iterate trough the loop 92 times per number (16 times if biggest number
+# the program has to handle is 1000).
+# This would also be significantly faster than what this program does.
+
+
+
+
+###### Overview of how registers are used ######
+
+# rax, final result
+# rcx, result of multiply
+# rdx, result of square_root
+# rbx, used while calculating square root
+# rbp,rsp, stack pointers
+# rsi, pointer to array of numbers being tested, in square_root: pointer for bit shifter
+#   (important: push rsi to stack while calculating square root)
+# rdi, pointer to a look up table {2^24, 2^23 ... 2^0, 0}.
+
+# r8-r14, can be used or changed inside subroutines 
+# r11, r12 are the two numbers being multiplied in multiply
+# r12, number being squared in square_root
+
+
+###### Code starts here ######
+
+main:
+    irmovq stack, %rbp      # Initialize stack
+    irmovq stack, %rsp      # Set up stack pointer
+        
+    call fibonacci
+    
+    halt
+    
+    
+    
+##################### multiplication #####################
+
+# multiplication with the peasant binary algorithm
+# rcx = r11 * r12
+
+# stores the multiplier in %r12 and number being multiplied in %r11
+decide_multiplier:
+    irmovq $1,%r8       # 2^0
+    irmovq $0,%r9       # bits in %r11
+    irmovq $0,%r10      # bits in %r12
+    irmovq $1,%r13      # for +1
+    
+    irmovq pot,%rdi     # reset the pointer
+
+    # loop for counting the bits
+    bits_loop:
+        # check for bit in %r11
+        rrmovq %r8,%r14
+        andq %r11,%r14
+        addq %r14,%r14      # r14 = 0 or r14 =/= 0
+        # if (r14 =/= 0), r14=1
+        cmovne %r13,%r14    # r14 = 1
+        addq %r14,%r9      # add 0 or 1 to r9
+        
+        #check for bit in %r12
+        rrmovq %r8,%r14
+        andq %r12,%r14
+        addq %r14,%r14      # r14 = 0 or r14 =/= 0
+        # if (r14 =/= 0), r14=1
+        cmovne %r13,%r14    # r14 = 1
+        addq %r14,%r10      # add 0 or 1 to r10
+        
+        # 2^(n+1)
+        addq %r8,%r8
+        
+        # check if r8 == 2^24
+        mrmovq (%rdi),%r14
+        subq %r8,%r14
+        jne bits_loop
+    
+    # when bits_loop ends, excecution continues here
+    
+    # decide which register is the multiplier
+    subq %r10,%r9       # if negative, swap r11 and r12 
+    
+    cmovl %r12,%r13
+    cmovl %r11,%r12
+    cmovl %r13,%r11
+    
+    ret
+
+# rcx = r11*12
+multiply:
+    irmovq $1,%r8       # 2^0
+    irmovq $0,%rcx      # store result in rcx
+    
+    irmovq pot,%rdi     # set pointer
+    
+    # adds some 2^n to the result each iteration
+    multiply_loop:
+        # decide if there is a bit to multiply
+        rrmovq %r8,%r14
+        andq %r12,%r14      # r14 = 0 or r14 = 2^n
+        addq %r14,%r14
+        
+        je skip_multiply    # skip if r14 = 0
+        
+            # %r10 is used to shift the number the correct ammount of times
+            irmovq $1,%r10         # 2^n used in shift
+
+            rrmovq %r11,%r9         # store r11 in r9
+            call shift              # r9 << 1
+            addq %r9,%rcx           # add shifted number to result
+
+        skip_multiply:
+        
+        # 2^(n+1)
+        addq %r8,%r8
+        
+        # check if end conditon met
+        mrmovq (%rdi),%r14
+        subq %r8,%r14
+        jne multiply_loop
+        
+    ret
+        
+# used inside multiply
+# shifts the number r9 left
+shift:
+    # check if (rsi == rdi), if false, shift number
+    rrmovq %r8,%r14
+    subq %r10,%r14      # set flags, check if r10 < 2^24
+    
+    jne shift_continue
+        ret
+    shift_continue:
+    
+    addq %r9,%r9        # shift number r9 << 1
+    addq %r10,%r10       # 2^(n+1)
+
+    jmp shift
+
+
+
+##################### square root #####################
+
+
+# while bit (%rsi) > num %r12, then shift the bit (bit >> 2)
+# calculates the correct starting bit for square_root
+starting_bit:
+
+    # set/clear registers
+    irmovq $16,%r8      # $16 => shift bit twice
+    irmovq pot,%rsi     # set pointer
+    
+    starting_bit_loop:
+
+        irmovq $0,%r9
+
+        # compare numbers
+        
+        mrmovq (%rsi),%r10
+        subq %r12,%r10      # set flags
+        
+        # shift bit
+        
+        cmovg %r8,%r9       # decide if bit gets shifted
+        addq %r9,%rsi       # move pointer by 0 or 16
+
+        # if bit was shifted, call starting_bit again
+        addq %r9,%r9
+        jg starting_bit_loop
+    
+    ret
+    
+# calculates the square root of r12
+# stores result in %rdx
+square_root:
+    # clear registers
+    irmovq $0,%rdx
+
+    call starting_bit
+
+    square_root_loop:
+        # set/clear registers
+        irmovq $0,%r9       # used to check if bit != 0
+        rrmovq %r12,%r11
+        
+        # compare numbers, if bit == 0, end loop
+        
+        mrmovq (%rsi),%r10
+        subq %r10,%r9       # set flags
+        
+        jne skip_a          # if bit == 0, end loop
+            ret
+        skip_a: 
+        
+        # if (num >= res + bit) {
+        #    num -= res + bit
+        #    res = (res >> 1) + bit }
+
+        mrmovq (%rsi),%r8       # get bit
+        irmovq $0,%rbx
+        addq %rdx,%r10          # %r10 = res + bit
+        subq %r10,%r11          # num - (res + bit)
+        cmovge %r11,%r12        # num = num - (res + bit)
+        cmovge %r8,%rbx         # rbx = bit/0, always add %rbx to res
+
+        irmovq $0,%r14
+        call shift_result
+
+        irmovq pot,%rdi     # reset table pointer
+        addq %rbx,%rdx          # add bit or 0 to result
+
+        # bit >> 2
+        irmovq $16,%r8
+        addq %r8,%rsi       # bit >> 2
+
+        jmp square_root_loop
+
+# does the operation result %rdx >> 1
+# clear %r14 (=0) before calling this
+shift_result:
+    # shift each bit from msb to lsb once by going trough the look up table
+    irmovq $0,%r9      # clear r9
+    
+    # check if there is a bit to shift
+    mrmovq (%rdi),%r8   # %r8 = 01...00
+    andq %rdx,%r8       # %r8 = 00...00 or 01...00
+    
+    
+    irmovq $8,%r13
+    addq %r13,%rdi      # move pointer
+    mrmovq (%rdi),%r13  # add this bit to the new result
+    
+    addq %r8,%r8
+    cmovne %r13,%r9
+    
+    addq %r9,%r14       # add shifted bit to the new result
+    
+    #subq  %r14,%rdx
+    
+    # check if at the end of look up table
+    addq %r13,%r13
+    jg shift_result
+    
+    # save new result in %rdx
+    rrmovq %r14,%rdx
+    
+    ret
+
+
+
+##################### fibonacci #####################
+
+# call this to begin testing the number sequence
+fibonacci:
+
+    irmovq array,%rsi       # pointer to the number sequence being tested
+    
+    
+
+    # loop for going trough the array
+    fibonacci_loop:
+        
+        # test next number in array
+        mrmovq (%rsi),%r11      # r11 = number being tested
+        pushq %rsi              # push array pointer to stack
+                                # test_number calls square_root, which uses rsi
+        call test_number
+        popq %rsi               # pop array pointer from stack
+        
+        irmovq $8,%r8
+        addq %r8,%rsi   # move stack pointer to next number
+        
+        jmp fibonacci_loop
+
+    # this point should never be reached
+    ret
+
+# Test if a number in rax is part of the fibonacci sequence.
+#
+# if yes, rax = -1      (currently rax = -1 doesn't do anything, because the program simply
+#                         halts when it runs into a non-fibonacci number or 0)
+# in no, rax = number being tested
+# if 0, rax = 0, this means all numbers were part of the fibonacci sequence
+# 
+# Program immediately halts after a non-fibonacci number or 0 is found.
+test_number:
+
+
+    ### test if at the end of the array ###
+    
+    irmovq $0,%r8
+    addq %r11,%r8       # set flags
+    
+    jne continue_test_a
+    
+        # end of array, the number being tested is 0
+        irmovq $0,%rax
+        halt
+    
+    continue_test_a:
+    
+    # set rax to number being tested
+    rrmovq %r11,%rax     
+
+
+    ### calculate rcx = 5*x*x+4 ###
+    
+    rrmovq %r11,%r12
+    call multiply       # rcx = x*x
+    
+    rrmovq %rcx,%r11    # r11 = x*x
+    irmovq $5,%r12      # r12 = 5
+    
+    call multiply       # rcx = r11*r12 = 5*x*x
+    
+    irmovq $4,%r8
+    addq %r8,%rcx       # rcx = 5*x*x+4
+    
+    ### test if rcx is a perfect square ###
+    
+    # (todo: this part would propably be more readable if it was a subroutine)
+    
+    # square_root calculates the square of r12 and rounds it down
+    # the result is stored in rdx
+    rrmovq %rcx,%r12
+    call square_root        # rdx = square_root(rcx)
+    
+    # push rcx = 5*x*x+4 to stack before calling multiply again
+    pushq %rcx
+
+    rrmovq %rdx,%r11    # r11 = square_root(rcx)
+    rrmovq %rdx,%r12    # r12 = square_root(rcx)
+    call multiply       # rcx = r11*r12 = square_root(rcx) * square_root(rcx)
+    rrmovq %rcx,%rdx    # rdx = square_root(rcx) * square_root(rcx)
+    popq %rcx           # rcx = 5*x*x+4
+    
+    subq %rcx,%rdx      # 0 => 5*x*x+4 is a perfect square => x is a fibonacci number
+    
+    jne continue_test_b
+    
+        # number being tested is a fibonacci number
+        irmovq $-1,%rax
+        ret
+    
+    continue_test_b:
+    
+    
+    ### calculate rcx = 5*x*x-4 (here rcx = rcx-8) ###
+    
+    irmovq $8,%r8
+    subq %r8,%rcx       # rcx = 5*x*x-4
+    
+    ### test if rcx is a perfect square ###
+    
+    # (todo: this part would propably be more readable if it was a subroutine)
+    
+    # square_root calculates the square of r12 and rounds it down
+    # the result is stored in rdx
+    rrmovq %rcx,%r12
+    call square_root        # rdx = square_root(rcx)
+    
+    
+    # push rcx = 5*x*x+4 to stack
+    pushq %rcx
+
+    rrmovq %rdx,%r11    # r11 = square_root(rcx)
+    rrmovq %rdx,%r12    # r12 = square_root(rcx)
+    call multiply       # rcx = r11*r12 = square_root(rcx) * square_root(rcx)
+    rrmovq %rcx,%rdx    # rdx = square_root(rcx) * square_root(rcx)
+    popq %rcx           # rcx = 5*x*x-4
+    
+    subq %rcx,%rdx      # 0 => 5*x*x-4 is a perfect square => x is a fibonacci number
+    
+    jne continue_test_c
+        
+        # number being tested is a fibonacci number
+        irmovq $-1,%rax
+        ret
+    
+    continue_test_c:
+    
+    # a number that is not a fibonacci number was found
+    # rax already contains the number being tested, so nothing needs to be updated
+    halt
+    
+    
+
+.pos 0x620
+stack:
+
+
+# look up table for powers of two
+# used for bit shifting and possibly other misc things
+# the nubmers being tested can't be above 1000, 5*1000*1000+4 = 5 000 004
+# log2(50000002) = 22,25
+# square_root requires that the first value is a 2^(2*n)
+# => the program only needs numbers up to 2^24
+.pos 0x628              # "pot" is placed above "array", there needs to be 2 empty rows!!
+.align 8
+pot:
+    .quad 16777216      # 2^24
+    .quad 8388608       # 2^23
+    .quad 4194304       # 2^22
+    .quad 2097152
+    .quad 1048576
+    .quad 524288
+    .quad 262144
+    .quad 131072
+    .quad 65536
+    .quad 32768
+    .quad 16384
+    .quad 8192
+    .quad 4096
+    .quad 2048
+    .quad 1024
+    .quad 512
+    .quad 256
+    .quad 128
+    .quad 64
+    .quad 32
+    .quad 16
+    .quad 8
+    .quad 4
+    .quad 2
+    .quad 1
+    .quad 0
+    .quad 0
+
+
+# examples of fibonacci numbers: 
+# 1,1,2,3,5,8,13,21,34,55,233,377,610,987
+
+# array for the numbers being tested
+.pos 0x700
+.align 8
+array:
+    .quad 1         # FEEL FREE TO MODIFY THE NUMBERS HERE
+    .quad 2
+    .quad 34
+    .quad 987
+    .quad 0
+    
