@@ -16,12 +16,3 @@ Demo [video](https://youtu.be/DQNFaxAtMqw)
 Project [Github](https://github.com/KPAhola/Puck-laying-robot)​
 
 Tinkercad [demo](https://www.tinkercad.com/things/8yVFrZpvLbs?sharecode=DBiaaLiFat3zCE42YEYs_RuZ-DGcOZObMB2OBiePGjs​)
-
-___
-
-
-**Data structures and algorithms**
-
-Here's a direct link to the [repo](https://github.com/JKoivuvaara/tira-2023-jkoivuvaara)
-
-code I actually wrote can be quicly found from the activity section [here](https://github.com/JKoivuvaara/tira-2023-jkoivuvaara/activity)
