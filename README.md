@@ -9,6 +9,8 @@ ___
 
 **Principles of Digital Fabrication**
 
+Our final project for this course was a distance measuring robot
+
 Final [presentation](https://unioulu-my.sharepoint.com/:p:/g/personal/jkoivuva20_student_oulu_fi/EVB8i2lh7X9NnQT7mfbl0fsBUJiz_8qDocWAjB6w9HLy_g?e=WFlHid)
 
 Demo [video](https://youtu.be/DQNFaxAtMqw)
