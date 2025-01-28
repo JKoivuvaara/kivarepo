@@ -19,10 +19,6 @@ a functioning TCP part of the course work with little hassle.
 
 '''
 
-'''
-server_address = "195.148.20.105"
-server_tcp_port = 10000
-'''
 parity_enabled = False  # TODO: add a global variable for encryption and multipart messaging?
 
 def send_and_receive_tcp(address, port, msg):
